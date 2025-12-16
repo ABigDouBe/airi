@@ -1,13 +1,13 @@
 import type { Card, ccv3 } from '@proj-airi/ccc'
 
-import { useLocalStorage } from '@vueuse/core'
 import { nanoid } from 'nanoid'
 import { defineStore, storeToRefs } from 'pinia'
-import { computed, onMounted, watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import SystemPromptV2 from '../../constants/prompts/system-v2'
 
+import { createResettableLocalStorage } from '../../utils/resettable'
 import { useConsciousnessStore } from './consciousness'
 import { useSpeechStore } from './speech'
 
@@ -54,8 +54,8 @@ export interface AiriCard extends Card {
 }
 
 export const useAiriCardStore = defineStore('airi-card', () => {
-  const cards = useLocalStorage<Map<string, AiriCard>>('airi-cards', new Map())
-  const activeCardId = useLocalStorage('airi-card-active-id', 'default')
+  const [cards, resetCards] = createResettableLocalStorage<Map<string, AiriCard>>('airi-cards', new Map())
+  const [activeCardId, resetActiveCardId] = createResettableLocalStorage('airi-card-active-id', 'default')
 
   const activeCard = computed(() => cards.value.get(activeCardId.value))
 
@@ -179,19 +179,38 @@ export const useAiriCardStore = defineStore('airi-card', () => {
     }
   }
 
-  onMounted(() => {
-    const { t } = useI18n()
+  // onMounted(() => {
+  //   if (cards.value.has('default'))
+  //     return
+  //   const { t } = useI18n()
+  //   cards.value.set('default', newAiriCard({
+  //     name: 'ReLU',
+  //     version: '1.0.0',
+  //     // description: 'ReLU is a simple and effective activation function that is used in many neural networks.',
+  //     description: SystemPromptV2(
+  //       t('base.prompt.prefix'),
+  //       t('base.prompt.suffix'),
+  //     ).content,
+  //   }))
+  // })
 
+  // Lilia: onMounted initialisation cause default card system prompt initialisation failure
+  function ensureDefaultCard() {
+    const { t } = useI18n()
+    if (cards.value.has('default'))
+      return
     cards.value.set('default', newAiriCard({
       name: 'ReLU',
       version: '1.0.0',
-      // description: 'ReLU is a simple and effective activation function that is used in many neural networks.',
       description: SystemPromptV2(
         t('base.prompt.prefix'),
         t('base.prompt.suffix'),
       ).content,
     }))
-  })
+    if (!activeCardId.value)
+      activeCardId.value = 'default'
+  }
+  ensureDefaultCard()
 
   watch(activeCard, (newCard: AiriCard | undefined) => {
     if (!newCard)
@@ -208,6 +227,11 @@ export const useAiriCardStore = defineStore('airi-card', () => {
     activeSpeechVoiceId.value = extension?.modules?.speech?.voice_id
   })
 
+  function resetState() {
+    resetActiveCardId()
+    resetCards()
+  }
+
   return {
     cards,
     activeCard,
@@ -215,6 +239,7 @@ export const useAiriCardStore = defineStore('airi-card', () => {
     addCard,
     removeCard,
     getCard,
+    resetState,
 
     currentModels: computed(() => {
       return {
